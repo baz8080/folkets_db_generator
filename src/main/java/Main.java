@@ -326,7 +326,9 @@ public class Main {
         if (node != null
                 && node.hasAttributes()
                 && node.getAttributes().getNamedItem(attributeName) != null) {
-            attributeText = node.getAttributes().getNamedItem(attributeName).getTextContent().trim();
+            attributeText = node.getAttributes().getNamedItem(attributeName).getTextContent()
+                    .replaceAll("\\|", "")
+                    .trim();
         }
 
         return StringEscapeUtils.unescapeHtml4(attributeText);
