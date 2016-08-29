@@ -43,10 +43,13 @@ public class Main {
         System.out.println("Converting: " + xmlFilename);
 
         Connection connection = DriverManager.getConnection("jdbc:sqlite:build/folkets.sqlite");
+        connection.setAutoCommit(false);
         String tableName = xmlFilename.substring(0, xmlFilename.indexOf("_public"));
 
         Statement statement = connection.createStatement();
         statement.executeUpdate(String.format(Locale.US, "drop table if exists %s", tableName));
+        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word", tableName));
+        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word2", tableName));
         statement.executeUpdate(
                 String.format(Locale.US, "create table %s(", tableName) +
                         "id INTEGER PRIMARY KEY ASC," +
@@ -70,9 +73,10 @@ public class Main {
                         "compounds TEXT" +
                         ")"
         );
+        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
+        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word2 ON %s (word COLLATE NOCASE)", tableName, tableName));
         statement.close();
-
-        connection.setAutoCommit(false);
+        connection.commit();
 
         PreparedStatement preparedStatement =
                 connection.prepareStatement("INSERT INTO " +
@@ -284,6 +288,7 @@ public class Main {
         preparedStatement.executeBatch();
         preparedStatement.close();
         connection.commit();
+
         connection.close();
 
         System.out.println("Converting: " + xmlFilename + " completed");
@@ -291,11 +296,6 @@ public class Main {
     }
 
     private static String pipeDelimit(String string1, String string2) {
-
-        if (string2 == null || "".equals(string2)) {
-            return string1;
-        }
-
         return string1 + "||" + string2;
     }
 
@@ -326,7 +326,9 @@ public class Main {
         if (node != null
                 && node.hasAttributes()
                 && node.getAttributes().getNamedItem(attributeName) != null) {
-            attributeText = node.getAttributes().getNamedItem(attributeName).getTextContent().trim();
+            attributeText = node.getAttributes().getNamedItem(attributeName).getTextContent()
+                    .replaceAll("\\|", "")
+                    .trim();
         }
 
         return StringEscapeUtils.unescapeHtml4(attributeText);
