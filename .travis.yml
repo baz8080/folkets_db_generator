@@ -5,4 +5,13 @@ branches:
   only:
   - master
 script:
-  - ./gradlew clean createDatabases
+- ./gradlew clean createDatabases
+deploy:
+  provider: releases
+  api_key:
+    secure: SL+13Q+PrqCDZeE8F/lh45Gj+2tnMqU/9xhd8DcG+2/b82S33tc12NQ6QiOa4dfOPS3qsh11869Ew4t3pQypcUExbNMve+bOEg3PI+m7XGI1uW2HpZGZTvHB7dpWVTsMNr1TXYcAPSXVKoWEwyaQwP4AxsHYZPKy9r5KLD6SxeSMQGOqRZTwXcpS5pZ78AuR38zt8kqLcWKtzOOr1vDTSAXA6/KcXtcdqFFaU4cmvpWZwGF0uNWnKflI75d0niX+s0333CcBe7A1gPZiU7LM6FwGUrNrjGkIcam4qsWBhQKnrsx38hQolxHFchP/5x5DcmqfnylDkgRAAKt7uVOezkfJ/JzSPvxRGD+hh7lemooiHzchcNHL0kXdPgVW9YGnBt93k9s7H5ghr9VBZLWc1Hu/3vLJ3T37eZnHyPLSM1B3dJG9gJ/R37GLqqaEFuOOqr2JLXQNs+rmpc4u3s9aABBDEcfW9P5r26IJ5eQ3aRUTuw1aAfXvwwGPnZe3fu+aV1z1Rv+XQsykXk1g1OL7tGXD3K1VKljLbvyQZltMvs0BbcBUdMtbfPtvi0pdSKF8IHTW2HHVHfZOrAfEtK109xioZqSsweZZsPmaZ9auYgVPF6wE9kmqPH4DFjlkKLHGv/fECVXFKHiBCk8pJcoTej+RkbfH3or9xEPLa+bNg+8=
+  file: build/folkets.sqlite
+  skip_cleanup: true
+  on:
+    repo: baz8080/folkets_db_generator
+    tags: true
