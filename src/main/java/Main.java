@@ -188,12 +188,15 @@ public class Main {
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE));
 
                 } else if ("phonetic".equals(childNodeName)) {
-                    wordPhonetic = getAttributeValue(childNode, VALUE_ATTRIBUTE);
+
+                    // https://en.wikipedia.org/wiki/Help:IPA_for_Swedish
+                    wordPhonetic = getPhonetic(childNode);
+
                 } else if ("synonym".equals(childNodeName)) {
 
                     String attributeValue = getAttributeValue(childNode, VALUE_ATTRIBUTE);
 
-                    if (attributeValue.contains(",")) {
+                    if (attributeValue.contains(COMMA)) {
                         List<String> inlineSynonyms =
                                 Arrays.asList(attributeValue.replaceAll(", ", COMMA).split(COMMA));
                         synonymsList.addAll(inlineSynonyms);
@@ -293,6 +296,19 @@ public class Main {
 
         System.out.println("Converting: " + xmlFilename + " completed");
         System.out.println("Unprocessed elements: " + unknownElements);
+    }
+
+    private static String getPhonetic(Node childNode) {
+        return getAttributeValue(childNode, VALUE_ATTRIBUTE)
+                .replaceAll("@", "\u014B")      // ŋ
+                .replaceAll(":", "\u02D0")      // ː
+                .replaceAll("r\\+d", "\u0256")  // ɖ
+                .replaceAll("r\\+s", "\u0282")  // ʂ
+                .replaceAll("r\\+t", "\u0288")  // ʈ
+                .replaceAll("r\\+l", "\u026D")  // ɭ
+                .replaceAll("r\\+n", "\u0273")  // ɳ
+                .replaceAll("\\$", "\u0267")    // ɧ
+                .replaceAll("\\+o", "\u0289");  // ʉ
     }
 
     private static String pipeDelimit(String string1, String string2) {
