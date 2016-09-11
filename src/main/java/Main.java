@@ -25,6 +25,7 @@ public class Main {
     private static final String COMMA = ",";
     private static final String VALUE_ATTRIBUTE = "value";
     private static final String TRANSLATION_NODE = "translation";
+    private static final String SEPARATOR = "**";
 
     @SuppressWarnings("UnusedAssignment")
     public static void main(String[] args) throws Exception {
@@ -38,6 +39,7 @@ public class Main {
         convertToDatabase(args[1]);
     }
 
+    @SuppressWarnings("UnusedAssignment")
     private static void convertToDatabase(String xmlFilename) throws Exception {
 
         System.out.println("Converting: " + xmlFilename);
@@ -56,7 +58,7 @@ public class Main {
                         "word TEXT, " +
                         "comment TEXT," +
                         "translations TEXT," +
-                        "type TEXT," +
+                        "types TEXT," +
                         "inflections TEXT," +
                         "examples TEXT," +
                         "definition TEXT," +
@@ -81,7 +83,7 @@ public class Main {
         PreparedStatement preparedStatement =
                 connection.prepareStatement("INSERT INTO " +
                         String.format(Locale.US, "%s(", tableName) +
-                        "word, comment, translations, type, inflections, " +
+                        "word, comment, translations, types, inflections, " +
                         "examples, definition, explanation, phonetic, " +
                         "synonyms, saldos, comparisons, antonyms, use, " +
                         "variant, idioms, derivations, compounds) " +
@@ -108,7 +110,7 @@ public class Main {
 
             String wordValue = "";
             String wordTranslations = "";
-            String wordClass = "";
+            String wordClasses = "";
             String wordComment = "";
             String wordInflections = "";
             String wordExamples = "";
@@ -128,7 +130,7 @@ public class Main {
             Node wordNode = wordsList.item(i);
 
             wordValue = getAttributeValue(wordNode, VALUE_ATTRIBUTE).replaceAll("\\|", "");
-            wordClass = getAttributeValue(wordNode, "class");
+            wordClasses = getAttributeValue(wordNode, "class");
             wordComment = getAttributeValue(wordNode, "comment");
 
             NodeList wordChildrenNodeList = wordNode.getChildNodes();
@@ -150,7 +152,8 @@ public class Main {
 
                 if (TRANSLATION_NODE.equals(childNodeName)) {
 
-                    translationsList.add(pipeDelimit(getAttributeValue(childNode, VALUE_ATTRIBUTE), getAttributeValue(childNode, "comment")));
+                    String comment = pipeDelimit(getAttributeValue(childNode, VALUE_ATTRIBUTE), getAttributeValue(childNode, "comment"));
+                    translationsList.add(comment);
 
                 } else if ("paradigm".equals(childNodeName)) {
 
@@ -166,7 +169,7 @@ public class Main {
                         }
                     }
 
-                    wordInflections = StringUtils.join(inflections, COMMA);
+                    wordInflections = StringUtils.join(inflections, SEPARATOR);
 
                 } else if ("example".equals(childNodeName)) {
 
@@ -255,21 +258,21 @@ public class Main {
                 }
             }
 
-            wordExamples = StringUtils.join(examplesList, COMMA);
-            wordTranslations = StringUtils.join(translationsList, COMMA);
-            wordSynonyms = StringUtils.join(synonymsList, COMMA);
-            wordSaldos = StringUtils.join(saldosList, COMMA);
-            wordComparisons = StringUtils.join(comparisonsList, COMMA);
-            wordAntonyms = StringUtils.join(antonymsList, COMMA);
-            wordIdioms = StringUtils.join(idiomsList, COMMA);
-            wordDerivations = StringUtils.join(derivationsList, COMMA);
-            wordCompounds = StringUtils.join(compoundList, COMMA);
+            wordExamples = StringUtils.join(examplesList, SEPARATOR);
+            wordTranslations = StringUtils.join(translationsList, SEPARATOR);
+            wordSynonyms = StringUtils.join(synonymsList, SEPARATOR);
+            wordSaldos = StringUtils.join(saldosList, SEPARATOR);
+            wordComparisons = StringUtils.join(comparisonsList, SEPARATOR);
+            wordAntonyms = StringUtils.join(antonymsList, SEPARATOR);
+            wordIdioms = StringUtils.join(idiomsList, SEPARATOR);
+            wordDerivations = StringUtils.join(derivationsList, SEPARATOR);
+            wordCompounds = StringUtils.join(compoundList, SEPARATOR);
 
             int columnIndex = 1;
             preparedStatement.setString(columnIndex++, wordValue);
             preparedStatement.setString(columnIndex++, wordComment);
             preparedStatement.setString(columnIndex++, wordTranslations);
-            preparedStatement.setString(columnIndex++, wordClass);
+            preparedStatement.setString(columnIndex++, wordClasses);
             preparedStatement.setString(columnIndex++, wordInflections);
             preparedStatement.setString(columnIndex++, wordExamples);
             preparedStatement.setString(columnIndex++, wordDefinition);
