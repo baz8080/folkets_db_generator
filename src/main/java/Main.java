@@ -209,12 +209,11 @@ public class Main {
                 } else if ("see".equals(childNodeName)) {
 
                     String seeType = getAttributeValue(childNode, "type");
-                    String seeValue = getAttributeValue(childNode, VALUE_ATTRIBUTE);
 
                     if ("saldo".equals(seeType)) {
-                        saldosList.add(seeValue);
+                        saldosList.add(getSaldoValue(childNode));
                     } else if ("compare".equals(seeType)) {
-                        comparisonsList.add(seeValue);
+                        comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
                     }
                 } else if ("related".equals(childNodeName)) {
 
@@ -336,6 +335,20 @@ public class Main {
         }
 
         return attributeText;
+    }
+
+    private static String getSaldoValue(Node node) {
+
+        String attributeText = "";
+
+        if (node != null
+                && node.hasAttributes()
+                && node.getAttributes().getNamedItem(VALUE_ATTRIBUTE) != null) {
+            attributeText = node.getAttributes().getNamedItem(VALUE_ATTRIBUTE).getTextContent()
+                    .trim();
+        }
+
+        return StringEscapeUtils.unescapeHtml4(attributeText);
     }
 
     private static String getAttributeValue(Node node, String attributeName) {
