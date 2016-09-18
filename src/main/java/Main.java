@@ -49,9 +49,16 @@ public class Main {
         String tableName = xmlFilename.substring(0, xmlFilename.indexOf("_public"));
 
         Statement statement = connection.createStatement();
+
+        statement.executeUpdate("drop table if exists android_metadata");
         statement.executeUpdate(String.format(Locale.US, "drop table if exists %s", tableName));
         statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word", tableName));
         statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word2", tableName));
+
+        statement.executeUpdate("create table android_metadata (locale text)");
+        statement.executeUpdate("insert into android_metadata values('en')");
+        statement.executeUpdate("insert into android_metadata values('sv')");
+
         statement.executeUpdate(
                 String.format(Locale.US, "create table %s(", tableName) +
                         "id INTEGER PRIMARY KEY ASC," +
