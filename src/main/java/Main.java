@@ -29,20 +29,12 @@ public class Main {
 
     @SuppressWarnings("UnusedAssignment")
     public static void main(String[] args) throws Exception {
-
-        if (args.length != 2) {
-            System.err.println("Expected 2 arguments");
-            exit(1);
-        }
-
-        convertToDatabase(args[0]);
-        convertToDatabase(args[1]);
+        convertToDatabase("en","folkets_en_sv_public.xml");
+        convertToDatabase("sv", "folkets_sv_en_public.xml");
     }
 
     @SuppressWarnings("UnusedAssignment")
-    private static void convertToDatabase(String xmlFilename) throws Exception {
-
-        System.out.println("Converting: " + xmlFilename);
+    private static void convertToDatabase(String baseLanguage, String xmlFilename) throws Exception {
 
         Connection connection = DriverManager.getConnection("jdbc:sqlite:build/folkets.sqlite");
         connection.setAutoCommit(false);
@@ -62,6 +54,7 @@ public class Main {
         statement.executeUpdate(
                 String.format(Locale.US, "create table %s(", tableName) +
                         "id INTEGER PRIMARY KEY ASC," +
+                        "language TEXT, " +
                         "word TEXT, " +
                         "comment TEXT," +
                         "translations TEXT," +
@@ -90,11 +83,11 @@ public class Main {
         PreparedStatement preparedStatement =
                 connection.prepareStatement("INSERT INTO " +
                         String.format(Locale.US, "%s(", tableName) +
-                        "word, comment, translations, types, inflections, " +
+                        "language, word, comment, translations, types, inflections, " +
                         "examples, definition, explanation, phonetic, " +
                         "synonyms, saldos, comparisons, antonyms, use, " +
                         "variant, idioms, derivations, compounds) " +
-                        "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 );
 
         InputStream svToEnStream = Main.class.getResourceAsStream(xmlFilename);
@@ -109,6 +102,7 @@ public class Main {
         Document document = documentBuilder.parse(svToEnStream);
 
         NodeList wordsList = document.getElementsByTagName("word");
+
         System.out.println("Number of words: " + wordsList.getLength());
 
         Set<String> unknownElements = new HashSet<>();
@@ -275,6 +269,7 @@ public class Main {
             wordCompounds = StringUtils.join(compoundList, SEPARATOR);
 
             int columnIndex = 1;
+            preparedStatement.setString(columnIndex++, baseLanguage);
             preparedStatement.setString(columnIndex++, wordValue);
             preparedStatement.setString(columnIndex++, wordComment);
             preparedStatement.setString(columnIndex++, wordTranslations);
