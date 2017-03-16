@@ -6,14 +6,15 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.util.*;
-
-import static java.lang.System.exit;
 
 /**
  * Converts the folkets XML into a denormalised sqlite db. It is not beautiful.
@@ -29,12 +30,39 @@ public class Main {
 
     @SuppressWarnings("UnusedAssignment")
     public static void main(String[] args) throws Exception {
+
         convertToDatabase("en","folkets_en_sv_public.xml");
         convertToDatabase("sv", "folkets_sv_en_public.xml");
     }
 
     @SuppressWarnings("UnusedAssignment")
     private static void convertToDatabase(String baseLanguage, String xmlFilename) throws Exception {
+
+        Map<String, String> paradigmMap = new HashMap<>();
+
+        if (baseLanguage.equals("sv")) {
+            BufferedReader bufferedReader =
+                    new BufferedReader(new FileReader("src/main/resources/saldo20v03.txt"));
+
+            String currentLine;
+            while ((currentLine = bufferedReader.readLine()) != null) {
+
+                if (currentLine.startsWith("#")) {
+                    continue;
+                }
+
+                String[] tokens = currentLine.split("\t");
+
+                if (!tokens[6].startsWith("nn")) {
+                    continue;
+                }
+
+                paradigmMap.put(tokens[0], tokens[6]);
+            }
+
+            bufferedReader.close();
+        }
+
 
         Connection connection = DriverManager.getConnection("jdbc:sqlite:build/folkets.sqlite");
         connection.setAutoCommit(false);
@@ -72,7 +100,8 @@ public class Main {
                         "variant TEXT," +
                         "idioms TEXT," +
                         "derivations TEXT," +
-                        "compounds TEXT" +
+                        "compounds TEXT," +
+                        "paradigm TEXT" +
                         ")"
         );
         statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
@@ -86,8 +115,8 @@ public class Main {
                         "language, word, comment, translations, types, inflections, " +
                         "examples, definition, explanation, phonetic, " +
                         "synonyms, saldos, comparisons, antonyms, use, " +
-                        "variant, idioms, derivations, compounds) " +
-                        "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                        "variant, idioms, derivations, compounds, paradigm) " +
+                        "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 );
 
         InputStream svToEnStream = Main.class.getResourceAsStream(xmlFilename);
@@ -127,6 +156,7 @@ public class Main {
             String wordIdioms = "";
             String wordDerivations = "";
             String wordCompounds = "";
+            String paradigm = "";
 
             Node wordNode = wordsList.item(i);
 
@@ -212,7 +242,21 @@ public class Main {
                     String seeType = getAttributeValue(childNode, "type");
 
                     if ("saldo".equals(seeType)) {
-                        saldosList.add(getSaldoValue(childNode));
+                        String saldoValue = getSaldoValue(childNode);
+
+                        String[] saldoValues = saldoValue.split("\\|\\|");
+
+                        if (saldoValues.length == 3) {
+                            String saldoForm = saldoValues[1];
+
+                            String inflectionParadigm = paradigmMap.get(saldoForm);
+
+                            if (inflectionParadigm != null && inflectionParadigm.trim().length() > 0) {
+                                paradigm = inflectionParadigm;
+                            }
+                        }
+
+                        saldosList.add(saldoValue);
                     } else if ("compare".equals(seeType)) {
                         comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
                     }
@@ -288,6 +332,7 @@ public class Main {
             preparedStatement.setString(columnIndex++, wordIdioms);
             preparedStatement.setString(columnIndex++, wordDerivations);
             preparedStatement.setString(columnIndex++, wordCompounds);
+            preparedStatement.setString(columnIndex++, paradigm);
 
             preparedStatement.addBatch();
         }
