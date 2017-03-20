@@ -20,6 +20,8 @@ The Folkets lexicon is distributed under the Distributed Creative Commons Attrib
 
 ### Word types
 
+There is a [full list](https://spraakbanken.gu.se/eng/research/saldo/tagset) available.
+
 pp: preposition
 nn: noun
 ab: adverb
@@ -38,3 +40,9 @@ suffix: suffix
 hp: prounoun (determiner)
 ps: possessive prounoun
 sn: subordinating conjunction
+
+### TODO Unknown types
+
+https://spraakbanken.gu.se/ws/saldo-ws/sms/json/{word}
+https://spraakbanken.gu.se/ws/saldo-ws/gen/json/{paradigm}/_
+https://spraakbanken.gu.se/eng/research/saldo/tagset
