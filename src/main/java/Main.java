@@ -6,14 +6,8 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.Statement;
+import java.io.*;
+import java.sql.*;
 import java.util.*;
 
 /**
@@ -24,9 +18,24 @@ import java.util.*;
 public class Main {
 
     private static final String COMMA = ",";
-    private static final String VALUE_ATTRIBUTE = "value";
-    private static final String TRANSLATION_NODE = "translation";
     private static final String SEPARATOR = "**";
+
+    private static final String VALUE_ATTRIBUTE = "value";
+
+    private static final String TRANSLATION_NODE = "translation";
+    private static final String PARADIGM_NODE = "paradigm";
+    private static final String EXAMPLE_NODE = "example";
+    private static final String SYNONYM_NODE = "synonym";
+    private static final String DEFINITION_NODE = "definition";
+    private static final String EXPLANATION_NODE = "explanation";
+    private static final String PHONETIC_NODE = "phonetic";
+    private static final String SEE_NODE = "see";
+    private static final String RELATED_NODE = "related";
+    private static final String USE_NODE = "use";
+    private static final String VARIANT_NODE = "variant";
+    private static final String IDIOM_NODE = "idiom";
+    private static final String DERIVATION_NODE = "derivation";
+    private static final String COMPOUND_NODE = "compound";
 
     @SuppressWarnings("UnusedAssignment")
     public static void main(String[] args) throws Exception {
@@ -38,143 +47,54 @@ public class Main {
     @SuppressWarnings("UnusedAssignment")
     private static void convertToDatabase(String baseLanguage, String xmlFilename) throws Exception {
 
-        Map<String, String> paradigmMap = new HashMap<>();
-
-        if (baseLanguage.equals("sv")) {
-            BufferedReader bufferedReader =
-                    new BufferedReader(new FileReader("src/main/resources/saldo20v03.txt"));
-
-            String currentLine;
-            while ((currentLine = bufferedReader.readLine()) != null) {
-
-                if (currentLine.startsWith("#")) {
-                    continue;
-                }
-
-                String[] tokens = currentLine.split("\t");
-
-                if (!tokens[6].startsWith("nn")) {
-                    continue;
-                }
-
-                paradigmMap.put(tokens[0], tokens[6]);
-            }
-
-            bufferedReader.close();
-        }
-
+        Map<String, WordData> paradigmMap = getParadigmMap(baseLanguage);
 
         Connection connection = DriverManager.getConnection("jdbc:sqlite:build/folkets.sqlite");
         connection.setAutoCommit(false);
+
         String tableName = xmlFilename.substring(0, xmlFilename.indexOf("_public"));
+        createTableAndIndices(tableName, connection);
 
-        Statement statement = connection.createStatement();
+        PreparedStatement preparedStatement = getPreparedStatement(connection, tableName);
 
-        statement.executeUpdate("drop table if exists android_metadata");
-        statement.executeUpdate(String.format(Locale.US, "drop table if exists %s", tableName));
-        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word", tableName));
-        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word2", tableName));
+        InputStream dbInputStream = Main.class.getResourceAsStream(xmlFilename);
 
-        statement.executeUpdate("create table android_metadata (locale text)");
-        statement.executeUpdate("insert into android_metadata values('en')");
-        statement.executeUpdate("insert into android_metadata values('sv')");
-
-        statement.executeUpdate(
-                String.format(Locale.US, "create table %s(", tableName) +
-                        "id INTEGER PRIMARY KEY ASC," +
-                        "language TEXT, " +
-                        "word TEXT, " +
-                        "comment TEXT," +
-                        "translations TEXT," +
-                        "types TEXT," +
-                        "inflections TEXT," +
-                        "examples TEXT," +
-                        "definition TEXT," +
-                        "explanation TEXT," +
-                        "phonetic TEXT," +
-                        "synonyms TEXT," +
-                        "saldos TEXT," +
-                        "comparisons TEXT," +
-                        "antonyms TEXT," +
-                        "use TEXT," +
-                        "variant TEXT," +
-                        "idioms TEXT," +
-                        "derivations TEXT," +
-                        "compounds TEXT," +
-                        "paradigm TEXT" +
-                        ")"
-        );
-        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
-        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word2 ON %s (word COLLATE NOCASE)", tableName, tableName));
-        statement.close();
-        connection.commit();
-
-        PreparedStatement preparedStatement =
-                connection.prepareStatement("INSERT INTO " +
-                        String.format(Locale.US, "%s(", tableName) +
-                        "language, word, comment, translations, types, inflections, " +
-                        "examples, definition, explanation, phonetic, " +
-                        "synonyms, saldos, comparisons, antonyms, use, " +
-                        "variant, idioms, derivations, compounds, paradigm) " +
-                        "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-                );
-
-        InputStream svToEnStream = Main.class.getResourceAsStream(xmlFilename);
-
-        if (svToEnStream == null) {
+        if (dbInputStream == null) {
             System.err.println("Inputsteam for folkets xml is null.");
             return;
         }
 
         DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
         DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
-        Document document = documentBuilder.parse(svToEnStream);
+        Document document = documentBuilder.parse(dbInputStream);
 
         NodeList wordsList = document.getElementsByTagName("word");
 
         System.out.println("Number of words: " + wordsList.getLength());
 
+        BufferedWriter allWordsWriter = new BufferedWriter(new FileWriter("build/incomplete_words.txt"));
+
         Set<String> unknownElements = new HashSet<>();
+        Set<String> wordClassTypes = new TreeSet<>();
 
         for (int i = 0; i < wordsList.getLength(); i++) {
 
-            String wordValue = "";
-            String wordTranslations = "";
-            String wordClasses = "";
-            String wordComment = "";
-            String wordInflections = "";
-            String wordExamples = "";
-            String wordDefinition = "";
-            String wordExplanation = "";
-            String wordPhonetic = "";
-            String wordSynonyms = "";
-            String wordSaldos = "";
-            String wordComparisons = "";
-            String wordAntonyms = "";
-            String wordUse = "";
-            String wordVariant = "";
-            String wordIdioms = "";
-            String wordDerivations = "";
-            String wordCompounds = "";
-            String paradigm = "";
+            String wordValue = "", wordTypes = "", wordComment = "", wordInflections = "", wordDefinition = "",
+                    wordExplanation = "", wordPhonetic = "", wordUse = "", wordVariant = "", wordParadigm = "";
+
+            List<String> examplesList = new ArrayList<>(), translationsList = new ArrayList<>(),
+                    synonymsList = new ArrayList<>(), saldosList = new ArrayList<>(),
+                    comparisonsList = new ArrayList<>(), antonymsList = new ArrayList<>(),
+                    idiomsList = new ArrayList<>(), derivationsList = new ArrayList<>(),
+                    compoundList = new ArrayList<>();
 
             Node wordNode = wordsList.item(i);
 
-            wordValue = getAttributeValue(wordNode, VALUE_ATTRIBUTE).replaceAll("\\|", "");
-            wordClasses = getAttributeValue(wordNode, "class");
+            wordValue = getWordValue(wordNode);
+            wordTypes = getWordTypes(wordNode);
             wordComment = getAttributeValue(wordNode, "comment");
 
             NodeList wordChildrenNodeList = wordNode.getChildNodes();
-
-            List<String> examplesList = new ArrayList<>();
-            List<String> translationsList = new ArrayList<>();
-            List<String> synonymsList = new ArrayList<>();
-            List<String> saldosList = new ArrayList<>();
-            List<String> comparisonsList = new ArrayList<>();
-            List<String> antonymsList = new ArrayList<>();
-            List<String> idiomsList = new ArrayList<>();
-            List<String> derivationsList = new ArrayList<>();
-            List<String> compoundList = new ArrayList<>();
 
             for (int childIndex = 0; childIndex < wordChildrenNodeList.getLength(); childIndex++) {
 
@@ -186,109 +106,69 @@ public class Main {
                     String comment = pipeDelimit(getAttributeValue(childNode, VALUE_ATTRIBUTE), getAttributeValue(childNode, "comment"));
                     translationsList.add(comment);
 
-                } else if ("paradigm".equals(childNodeName)) {
+                } else if (PARADIGM_NODE.equals(childNodeName)) {
 
-                    NodeList inflectionNodeList = childNode.getChildNodes();
-                    List<String> inflections = new ArrayList<>();
+                    wordInflections = extractParadigmValues(childNode);
 
-                    for (int inflectionIndex = 0; inflectionIndex < inflectionNodeList.getLength(); inflectionIndex++) {
+                } else if (EXAMPLE_NODE.equals(childNodeName)) {
 
-                        Node inflectionNode = inflectionNodeList.item(inflectionIndex);
+                    extractExampleValues(examplesList, childNode);
 
-                        if ("inflection".equals(inflectionNode.getNodeName())) {
-                            inflections.add(getAttributeValue(inflectionNode, VALUE_ATTRIBUTE));
-                        }
-                    }
-
-                    wordInflections = StringUtils.join(inflections, SEPARATOR);
-
-                } else if ("example".equals(childNodeName)) {
-
-                    String example = getAttributeValue(childNode, VALUE_ATTRIBUTE);
-                    String translation = getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE);
-                    examplesList.add(pipeDelimit(example, translation));
-
-                } else if ("definition".equals(childNodeName)) {
+                } else if (DEFINITION_NODE.equals(childNodeName)) {
 
                     wordDefinition = pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE));
 
 
-                } else if ("explanation".equals(childNodeName)) {
+                } else if (EXPLANATION_NODE.equals(childNodeName)) {
 
                     wordExplanation = pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE));
 
-                } else if ("phonetic".equals(childNodeName)) {
+                } else if (PHONETIC_NODE.equals(childNodeName)) {
 
                     // https://en.wikipedia.org/wiki/Help:IPA_for_Swedish
                     wordPhonetic = getPhonetic(childNode);
 
-                } else if ("synonym".equals(childNodeName)) {
+                } else if (SYNONYM_NODE.equals(childNodeName)) {
 
-                    String attributeValue = getAttributeValue(childNode, VALUE_ATTRIBUTE);
+                    extractSynonymValues(synonymsList, childNode);
 
-                    if (attributeValue.contains(COMMA)) {
-                        List<String> inlineSynonyms =
-                                Arrays.asList(attributeValue.replaceAll(", ", COMMA).split(COMMA));
-                        synonymsList.addAll(inlineSynonyms);
-                    } else {
-                        synonymsList.add(attributeValue);
-                    }
-                } else if ("see".equals(childNodeName)) {
+                } else if (SEE_NODE.equals(childNodeName)) {
 
-                    String seeType = getAttributeValue(childNode, "type");
+                    extractSeeValues(saldosList, comparisonsList, childNode);
 
-                    if ("saldo".equals(seeType)) {
-                        String saldoValue = getSaldoValue(childNode);
-
-                        String[] saldoValues = saldoValue.split("\\|\\|");
-
-                        if (saldoValues.length == 3) {
-                            String saldoForm = saldoValues[1];
-
-                            String inflectionParadigm = paradigmMap.get(saldoForm);
-
-                            if (inflectionParadigm != null && inflectionParadigm.trim().length() > 0) {
-                                paradigm = inflectionParadigm;
-                            }
-                        }
-
-                        saldosList.add(saldoValue);
-                    } else if ("compare".equals(seeType)) {
-                        comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
-                    }
-                } else if ("related".equals(childNodeName)) {
+                } else if (RELATED_NODE.equals(childNodeName)) {
 
                     antonymsList.add(pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE)));
 
-                } else if ("use".equals(childNodeName)) {
+                } else if (USE_NODE.equals(childNodeName)) {
 
                     wordUse = getAttributeValue(childNode, VALUE_ATTRIBUTE);
 
-                } else if ("variant".equals(childNodeName)) {
+                } else if (VARIANT_NODE.equals(childNodeName)) {
 
                     wordVariant = getAttributeValue(childNode, VALUE_ATTRIBUTE);
 
-                } else if ("idiom".equalsIgnoreCase(childNodeName)) {
+                } else if (IDIOM_NODE.equalsIgnoreCase(childNodeName)) {
 
                     idiomsList.add(pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE))
                     );
 
-                } else if ("derivation".equalsIgnoreCase(childNodeName)) {
+                } else if (DERIVATION_NODE.equalsIgnoreCase(childNodeName)) {
 
                     derivationsList.add(pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
                             getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE))
                     );
 
-                } else if ("compound".equalsIgnoreCase(childNodeName)) {
+                } else if (COMPOUND_NODE.equalsIgnoreCase(childNodeName)) {
 
                     compoundList.add(pipeDelimit(
                             getAttributeValue(childNode, VALUE_ATTRIBUTE),
@@ -300,51 +180,237 @@ public class Main {
                         unknownElements.add(childNodeName);
                     }
                 }
+
+                String onlyWordKey = wordValue.toLowerCase(Locale.US);
+                WordData wordData = paradigmMap.get(onlyWordKey);
+
+                if (wordData != null) {
+                    /*
+                        Fun with incomplete data, part 1.
+                        Try to recover word type, a.k.a. part of speech.
+                     */
+                    if (wordData.getPartOfSpeech() != null && !wordData.getPartOfSpeech().equals("") && wordTypes.equals("")) {
+                        wordTypes = wordData.getPartOfSpeech();
+                    }
+
+                    if (wordData.getParadigm() != null && !wordData.getParadigm().equals("") && wordParadigm.equals("")) {
+                        wordParadigm = wordData.getParadigm();
+                    }
+                }
+
+                String typeAndWordKey = wordTypes + "." + onlyWordKey;
+                wordData = paradigmMap.get(typeAndWordKey);
+
+                if (wordData != null) {
+                    /*
+                        Fun with incomplete data, part 1.
+                        We might have recovered the type, let's see if we can get the paradigm.
+                     */
+                    if (wordData.getPartOfSpeech() != null && !wordData.getPartOfSpeech().equals("") && wordTypes.equals("")) {
+                        wordTypes = wordData.getPartOfSpeech();
+                    }
+
+                    if (wordData.getParadigm() != null && !wordData.getParadigm().equals("") && wordParadigm.equals("")) {
+                        wordParadigm = wordData.getParadigm();
+                    }
+                }
+
+                String[] wordClassesArray = wordTypes.split(",");
+
+                for (String wordClassValue : wordClassesArray) {
+                    wordClassTypes.add(wordClassValue.trim());
+                }
             }
 
-            wordExamples = StringUtils.join(examplesList, SEPARATOR);
-            wordTranslations = StringUtils.join(translationsList, SEPARATOR);
-            wordSynonyms = StringUtils.join(synonymsList, SEPARATOR);
-            wordSaldos = StringUtils.join(saldosList, SEPARATOR);
-            wordComparisons = StringUtils.join(comparisonsList, SEPARATOR);
-            wordAntonyms = StringUtils.join(antonymsList, SEPARATOR);
-            wordIdioms = StringUtils.join(idiomsList, SEPARATOR);
-            wordDerivations = StringUtils.join(derivationsList, SEPARATOR);
-            wordCompounds = StringUtils.join(compoundList, SEPARATOR);
+            if (baseLanguage.equals("sv")) {
 
-            int columnIndex = 1;
-            preparedStatement.setString(columnIndex++, baseLanguage);
-            preparedStatement.setString(columnIndex++, wordValue);
-            preparedStatement.setString(columnIndex++, wordComment);
-            preparedStatement.setString(columnIndex++, wordTranslations);
-            preparedStatement.setString(columnIndex++, wordClasses);
-            preparedStatement.setString(columnIndex++, wordInflections);
-            preparedStatement.setString(columnIndex++, wordExamples);
-            preparedStatement.setString(columnIndex++, wordDefinition);
-            preparedStatement.setString(columnIndex++, wordExplanation);
-            preparedStatement.setString(columnIndex++, wordPhonetic);
-            preparedStatement.setString(columnIndex++, wordSynonyms);
-            preparedStatement.setString(columnIndex++, wordSaldos);
-            preparedStatement.setString(columnIndex++, wordComparisons);
-            preparedStatement.setString(columnIndex++, wordAntonyms);
-            preparedStatement.setString(columnIndex++, wordUse);
-            preparedStatement.setString(columnIndex++, wordVariant);
-            preparedStatement.setString(columnIndex++, wordIdioms);
-            preparedStatement.setString(columnIndex++, wordDerivations);
-            preparedStatement.setString(columnIndex++, wordCompounds);
-            preparedStatement.setString(columnIndex++, paradigm);
+                /*
+                    Write out incomplete data, to be (hopefully) read by a separate project and partially
+                    recovered
+                 */
+                if (wordTypes.equals("") || wordParadigm.equals("")) {
+                    allWordsWriter.write(wordValue);
+                    allWordsWriter.write("\t");
+                    allWordsWriter.write(wordTypes.equals("") ? "unknown" : wordTypes);
+                    allWordsWriter.write("\t");
+                    allWordsWriter.write(wordParadigm.equals("") ? "unknown" : wordParadigm);
+                    allWordsWriter.newLine();
+                }
+            }
 
-            preparedStatement.addBatch();
+            populateStatement(preparedStatement, baseLanguage, wordValue, wordTypes, wordComment, wordInflections,
+                    wordDefinition, wordExplanation, wordPhonetic, wordUse, wordVariant, wordParadigm, examplesList,
+                    translationsList, synonymsList, saldosList, comparisonsList, antonymsList, idiomsList,
+                    derivationsList, compoundList);
         }
 
         preparedStatement.executeBatch();
         preparedStatement.close();
         connection.commit();
 
+        connection.setAutoCommit(true);
+        Statement vacuumStatement = connection.createStatement();
+        vacuumStatement.execute("VACUUM;");
+
         connection.close();
+
+        allWordsWriter.flush();
+        allWordsWriter.close();
 
         System.out.println("Converting: " + xmlFilename + " completed");
         System.out.println("Unprocessed elements: " + unknownElements);
+        System.out.println("Word class types: " + wordClassTypes);
+    }
+
+    private static void extractSynonymValues(List<String> synonymsList, Node childNode) {
+        String attributeValue = getAttributeValue(childNode, VALUE_ATTRIBUTE);
+
+        if (attributeValue.contains(COMMA)) {
+            List<String> inlineSynonyms =
+                    Arrays.asList(attributeValue.replaceAll(", ", COMMA).split(COMMA));
+            synonymsList.addAll(inlineSynonyms);
+        } else {
+            synonymsList.add(attributeValue);
+        }
+    }
+
+    private static void extractExampleValues(List<String> examplesList, Node childNode) {
+        String example = getAttributeValue(childNode, VALUE_ATTRIBUTE);
+        String translation = getAttributeValueInChild(childNode, TRANSLATION_NODE, VALUE_ATTRIBUTE);
+        examplesList.add(pipeDelimit(example, translation));
+    }
+
+    private static String extractParadigmValues(Node childNode) {
+        String wordInflections;
+        NodeList inflectionNodeList = childNode.getChildNodes();
+        List<String> inflections = new ArrayList<>();
+
+        for (int inflectionIndex = 0; inflectionIndex < inflectionNodeList.getLength(); inflectionIndex++) {
+
+            Node inflectionNode = inflectionNodeList.item(inflectionIndex);
+
+            if ("inflection".equals(inflectionNode.getNodeName())) {
+                inflections.add(getAttributeValue(inflectionNode, VALUE_ATTRIBUTE));
+            }
+        }
+
+        wordInflections = StringUtils.join(inflections, SEPARATOR);
+        return wordInflections;
+    }
+
+    private static String getWordTypes(Node wordNode) {
+        return getAttributeValue(wordNode, "class")
+                .replaceAll("jj", "av");
+    }
+
+    private static String getWordValue(Node wordNode) {
+        return getAttributeValue(wordNode, VALUE_ATTRIBUTE).replaceAll("\\|", "");
+    }
+
+    private static void extractSeeValues(List<String> saldosList, List<String> comparisonsList, Node childNode) {
+        String seeType = getAttributeValue(childNode, "type");
+
+        if ("saldo".equals(seeType)) {
+            String saldoValue = getSaldoValue(childNode);
+            saldosList.add(saldoValue);
+        } else if ("compare".equals(seeType)) {
+            comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
+        }
+    }
+
+    /**
+     * Creates a map based on saldo20v03.txt from a word to a WordData object with part of speech, paradigm etc.
+     *
+     * @param baseLanguage The base language that we are processing
+     * @return A map of words to word data
+     * @throws IOException
+     */
+    private static Map<String, WordData> getParadigmMap(String baseLanguage) throws IOException {
+        Map<String, WordData> paradigmMap = new HashMap<>();
+        Set<String> bannedWords = new HashSet<>();
+
+        if (baseLanguage.equals("sv")) {
+            BufferedReader bufferedReader =
+                    new BufferedReader(new FileReader("src/main/resources/saldo20v03.txt"));
+
+            String currentLine;
+
+            while ((currentLine = bufferedReader.readLine()) != null) {
+
+                // Comment lines
+                if (currentLine.startsWith("#")) {
+                    continue;
+                }
+
+                String[] tokens = currentLine.split("\t");
+
+                if (tokens.length != 7) {
+                    continue;
+                }
+
+                String saldoId = tokens[0];
+                String associationsId = tokens[3];
+                String word = tokens[4];
+                String partOfSpeech = tokens[5];
+                String paradigm = tokens[6];
+
+                WordData wordData = new WordData(saldoId, associationsId, partOfSpeech, paradigm);
+
+                String key = word.toLowerCase(Locale.US);
+
+                WordData existingWordData = paradigmMap.get(key);
+
+                if (existingWordData != null) {
+
+                    /*
+                        The word is already in the map, but this is OK if all of the other forms of that word
+                        share the same part of speech and paradigm. If this is the case, then the recovery of data
+                        for that word is a sane thing to do.
+
+                        If the word already exists, but the other part of speech / paradigm does not match, then we
+                        can't trust this mechanism for recovering data. We must go deeper.
+                     */
+
+                    if (!existingWordData.getPartOfSpeech().equals(wordData.getPartOfSpeech())
+                            || !existingWordData.getParadigm().equals(wordData.getParadigm())) {
+                        bannedWords.add(key);
+                        paradigmMap.remove(key);
+                    }
+
+                } else {
+
+                    if (!bannedWords.contains(key)) {
+                        paradigmMap.put(key, wordData);
+                    }
+                }
+
+                /*
+                    Next, we do the same for a more finely grained key. Returns are much diminished at this point.
+                 */
+
+                key = partOfSpeech + "." + word.toLowerCase(Locale.US);
+                existingWordData = paradigmMap.get(key);
+
+                if (existingWordData != null) {
+
+                    if (!existingWordData.getPartOfSpeech().equals(wordData.getPartOfSpeech())
+                            || !existingWordData.getParadigm().equals(wordData.getParadigm())) {
+                        bannedWords.add(key);
+                        paradigmMap.remove(key);
+                    }
+
+                } else {
+
+                    if (!bannedWords.contains(key)) {
+                        paradigmMap.put(key, wordData);
+                    }
+                }
+            }
+
+            bufferedReader.close();
+        }
+
+        return paradigmMap;
     }
 
     private static String getPhonetic(Node childNode) {
@@ -413,4 +479,110 @@ public class Main {
         return StringEscapeUtils.unescapeHtml4(attributeText);
     }
 
+    private static PreparedStatement getPreparedStatement(Connection connection, String tableName) throws SQLException {
+        return connection.prepareStatement("INSERT INTO " +
+                String.format(Locale.US, "%s(", tableName) +
+                "language, word, comment, translations, types, inflections, " +
+                "examples, definition, explanation, phonetic, " +
+                "synonyms, saldos, comparisons, antonyms, use, " +
+                "variant, idioms, derivations, compounds, paradigm) " +
+                "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        );
+    }
+
+    private static String createTableAndIndices(String tableName, Connection connection) throws SQLException {
+
+        Statement statement = connection.createStatement();
+
+        statement.executeUpdate("drop table if exists android_metadata");
+        statement.executeUpdate(String.format(Locale.US, "drop table if exists %s", tableName));
+        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word", tableName));
+        statement.executeUpdate(String.format(Locale.US, "drop index if exists %s_idx_word2", tableName));
+
+        statement.executeUpdate("create table android_metadata (locale text)");
+        statement.executeUpdate("insert into android_metadata values('en')");
+        statement.executeUpdate("insert into android_metadata values('sv')");
+
+        statement.executeUpdate(
+                String.format(Locale.US, "create table %s(", tableName) +
+                        "id INTEGER PRIMARY KEY ASC," +
+                        "language TEXT, " +
+                        "word TEXT, " +
+                        "comment TEXT," +
+                        "translations TEXT," +
+                        "types TEXT," +
+                        "inflections TEXT," +
+                        "examples TEXT," +
+                        "definition TEXT," +
+                        "explanation TEXT," +
+                        "phonetic TEXT," +
+                        "synonyms TEXT," +
+                        "saldos TEXT," +
+                        "comparisons TEXT," +
+                        "antonyms TEXT," +
+                        "use TEXT," +
+                        "variant TEXT," +
+                        "idioms TEXT," +
+                        "derivations TEXT," +
+                        "compounds TEXT," +
+                        "paradigm TEXT" +
+                        ")"
+        );
+        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
+        statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word2 ON %s (word COLLATE NOCASE)", tableName, tableName));
+        statement.close();
+        connection.commit();
+        return tableName;
+    }
+
+    @SuppressWarnings("UnusedAssignment")
+    private static void populateStatement(PreparedStatement preparedStatement, String baseLanguage, String wordValue, String wordTypes, String wordComment, String wordInflections, String wordDefinition, String wordExplanation, String wordPhonetic, String wordUse, String wordVariant, String wordParadigm, List<String> examplesList, List<String> translationsList, List<String> synonymsList, List<String> saldosList, List<String> comparisonsList, List<String> antonymsList, List<String> idiomsList, List<String> derivationsList, List<String> compoundList) throws SQLException {
+        int columnIndex = 1;
+
+        preparedStatement.setString(columnIndex++, baseLanguage);
+        preparedStatement.setString(columnIndex++, wordValue);
+        preparedStatement.setString(columnIndex++, wordComment);
+        preparedStatement.setString(columnIndex++, StringUtils.join(translationsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, wordTypes);
+        preparedStatement.setString(columnIndex++, wordInflections);
+        preparedStatement.setString(columnIndex++, StringUtils.join(examplesList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, wordDefinition);
+        preparedStatement.setString(columnIndex++, wordExplanation);
+        preparedStatement.setString(columnIndex++, wordPhonetic);
+        preparedStatement.setString(columnIndex++, StringUtils.join(synonymsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(saldosList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(comparisonsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(antonymsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, wordUse);
+        preparedStatement.setString(columnIndex++, wordVariant);
+        preparedStatement.setString(columnIndex++, StringUtils.join(idiomsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(derivationsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(compoundList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, wordParadigm);
+
+        preparedStatement.addBatch();
+    }
+
+    static class WordData {
+
+        private final String saldoId;
+        private final String associationsId;
+        private final String partOfSpeech;
+        private final String paradigm;
+
+        WordData(String saldoId, String associationsId, String partOfSpeech, String paradigm) {
+            this.saldoId = saldoId;
+            this.associationsId = associationsId;
+            this.partOfSpeech = partOfSpeech;
+            this.paradigm = paradigm;
+        }
+
+        String getPartOfSpeech() {
+            return partOfSpeech;
+        }
+
+        String getParadigm() {
+            return paradigm;
+        }
+    }
 }
