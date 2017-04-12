@@ -6,7 +6,9 @@ import org.w3c.dom.NodeList;
 
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
-import java.io.*;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.InputStream;
 import java.sql.*;
 import java.util.*;
 
@@ -47,8 +49,6 @@ public class Main {
     @SuppressWarnings("UnusedAssignment")
     private static void convertToDatabase(String baseLanguage, String xmlFilename) throws Exception {
 
-        Map<String, WordData> paradigmMap = getParadigmMap(baseLanguage);
-
         Connection connection = DriverManager.getConnection("jdbc:sqlite:build/folkets.sqlite");
         connection.setAutoCommit(false);
 
@@ -80,7 +80,7 @@ public class Main {
         for (int i = 0; i < wordsList.getLength(); i++) {
 
             String wordValue = "", wordTypes = "", wordComment = "", wordInflections = "", wordDefinition = "",
-                    wordExplanation = "", wordPhonetic = "", wordUse = "", wordVariant = "", wordParadigm = "";
+                    wordExplanation = "", wordPhonetic = "", wordUse = "", wordVariant = "";
 
             List<String> examplesList = new ArrayList<>(), translationsList = new ArrayList<>(),
                     synonymsList = new ArrayList<>(), saldosList = new ArrayList<>(),
@@ -181,40 +181,6 @@ public class Main {
                     }
                 }
 
-                String onlyWordKey = wordValue.toLowerCase(Locale.US);
-                WordData wordData = paradigmMap.get(onlyWordKey);
-
-                if (wordData != null) {
-                    /*
-                        Fun with incomplete data, part 1.
-                        Try to recover word type, a.k.a. part of speech.
-                     */
-                    if (wordData.getPartOfSpeech() != null && !wordData.getPartOfSpeech().equals("") && wordTypes.equals("")) {
-                        wordTypes = wordData.getPartOfSpeech();
-                    }
-
-                    if (wordData.getParadigm() != null && !wordData.getParadigm().equals("") && wordParadigm.equals("")) {
-                        wordParadigm = wordData.getParadigm();
-                    }
-                }
-
-                String typeAndWordKey = wordTypes + "." + onlyWordKey;
-                wordData = paradigmMap.get(typeAndWordKey);
-
-                if (wordData != null) {
-                    /*
-                        Fun with incomplete data, part 1.
-                        We might have recovered the type, let's see if we can get the paradigm.
-                     */
-                    if (wordData.getPartOfSpeech() != null && !wordData.getPartOfSpeech().equals("") && wordTypes.equals("")) {
-                        wordTypes = wordData.getPartOfSpeech();
-                    }
-
-                    if (wordData.getParadigm() != null && !wordData.getParadigm().equals("") && wordParadigm.equals("")) {
-                        wordParadigm = wordData.getParadigm();
-                    }
-                }
-
                 String[] wordClassesArray = wordTypes.split(",");
 
                 for (String wordClassValue : wordClassesArray) {
@@ -222,24 +188,8 @@ public class Main {
                 }
             }
 
-            if (baseLanguage.equals("sv")) {
-
-                /*
-                    Write out incomplete data, to be (hopefully) read by a separate project and partially
-                    recovered
-                 */
-                if (wordTypes.equals("") || wordParadigm.equals("")) {
-                    allWordsWriter.write(wordValue);
-                    allWordsWriter.write("\t");
-                    allWordsWriter.write(wordTypes.equals("") ? "unknown" : wordTypes);
-                    allWordsWriter.write("\t");
-                    allWordsWriter.write(wordParadigm.equals("") ? "unknown" : wordParadigm);
-                    allWordsWriter.newLine();
-                }
-            }
-
             populateStatement(preparedStatement, baseLanguage, wordValue, wordTypes, wordComment, wordInflections,
-                    wordDefinition, wordExplanation, wordPhonetic, wordUse, wordVariant, wordParadigm, examplesList,
+                    wordDefinition, wordExplanation, wordPhonetic, wordUse, wordVariant, examplesList,
                     translationsList, synonymsList, saldosList, comparisonsList, antonymsList, idiomsList,
                     derivationsList, compoundList);
         }
@@ -318,101 +268,6 @@ public class Main {
         }
     }
 
-    /**
-     * Creates a map based on saldo20v03.txt from a word to a WordData object with part of speech, paradigm etc.
-     *
-     * @param baseLanguage The base language that we are processing
-     * @return A map of words to word data
-     * @throws IOException
-     */
-    private static Map<String, WordData> getParadigmMap(String baseLanguage) throws IOException {
-        Map<String, WordData> paradigmMap = new HashMap<>();
-        Set<String> bannedWords = new HashSet<>();
-
-        if (baseLanguage.equals("sv")) {
-            BufferedReader bufferedReader =
-                    new BufferedReader(new FileReader("src/main/resources/saldo20v03.txt"));
-
-            String currentLine;
-
-            while ((currentLine = bufferedReader.readLine()) != null) {
-
-                // Comment lines
-                if (currentLine.startsWith("#")) {
-                    continue;
-                }
-
-                String[] tokens = currentLine.split("\t");
-
-                if (tokens.length != 7) {
-                    continue;
-                }
-
-                String saldoId = tokens[0];
-                String associationsId = tokens[3];
-                String word = tokens[4];
-                String partOfSpeech = tokens[5];
-                String paradigm = tokens[6];
-
-                WordData wordData = new WordData(saldoId, associationsId, partOfSpeech, paradigm);
-
-                String key = word.toLowerCase(Locale.US);
-
-                WordData existingWordData = paradigmMap.get(key);
-
-                if (existingWordData != null) {
-
-                    /*
-                        The word is already in the map, but this is OK if all of the other forms of that word
-                        share the same part of speech and paradigm. If this is the case, then the recovery of data
-                        for that word is a sane thing to do.
-
-                        If the word already exists, but the other part of speech / paradigm does not match, then we
-                        can't trust this mechanism for recovering data. We must go deeper.
-                     */
-
-                    if (!existingWordData.getPartOfSpeech().equals(wordData.getPartOfSpeech())
-                            || !existingWordData.getParadigm().equals(wordData.getParadigm())) {
-                        bannedWords.add(key);
-                        paradigmMap.remove(key);
-                    }
-
-                } else {
-
-                    if (!bannedWords.contains(key)) {
-                        paradigmMap.put(key, wordData);
-                    }
-                }
-
-                /*
-                    Next, we do the same for a more finely grained key. Returns are much diminished at this point.
-                 */
-
-                key = partOfSpeech + "." + word.toLowerCase(Locale.US);
-                existingWordData = paradigmMap.get(key);
-
-                if (existingWordData != null) {
-
-                    if (!existingWordData.getPartOfSpeech().equals(wordData.getPartOfSpeech())
-                            || !existingWordData.getParadigm().equals(wordData.getParadigm())) {
-                        bannedWords.add(key);
-                        paradigmMap.remove(key);
-                    }
-
-                } else {
-
-                    if (!bannedWords.contains(key)) {
-                        paradigmMap.put(key, wordData);
-                    }
-                }
-            }
-
-            bufferedReader.close();
-        }
-
-        return paradigmMap;
-    }
-
     private static String getPhonetic(Node childNode) {
         return getAttributeValue(childNode, VALUE_ATTRIBUTE)
                 .replaceAll("@", "\u014B")      // ŋ
@@ -485,8 +340,8 @@ public class Main {
                 "language, word, comment, translations, types, inflections, " +
                 "examples, definition, explanation, phonetic, " +
                 "synonyms, saldos, comparisons, antonyms, use, " +
-                "variant, idioms, derivations, compounds, paradigm) " +
-                "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "variant, idioms, derivations, compounds) " +
+                "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
     }
 
@@ -524,8 +379,7 @@ public class Main {
                         "variant TEXT," +
                         "idioms TEXT," +
                         "derivations TEXT," +
-                        "compounds TEXT," +
-                        "paradigm TEXT" +
+                        "compounds TEXT" +
                         ")"
         );
         statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
@@ -536,7 +390,14 @@ public class Main {
     }
 
     @SuppressWarnings("UnusedAssignment")
-    private static void populateStatement(PreparedStatement preparedStatement, String baseLanguage, String wordValue, String wordTypes, String wordComment, String wordInflections, String wordDefinition, String wordExplanation, String wordPhonetic, String wordUse, String wordVariant, String wordParadigm, List<String> examplesList, List<String> translationsList, List<String> synonymsList, List<String> saldosList, List<String> comparisonsList, List<String> antonymsList, List<String> idiomsList, List<String> derivationsList, List<String> compoundList) throws SQLException {
+    private static void populateStatement(PreparedStatement preparedStatement, String baseLanguage,
+                                          String wordValue, String wordTypes, String wordComment, String wordInflections,
+                                          String wordDefinition, String wordExplanation, String wordPhonetic,
+                                          String wordUse, String wordVariant, List<String> examplesList,
+                                          List<String> translationsList, List<String> synonymsList,
+                                          List<String> saldosList, List<String> comparisonsList,
+                                          List<String> antonymsList, List<String> idiomsList, List<String> derivationsList,
+                                          List<String> compoundList) throws SQLException {
         int columnIndex = 1;
 
         preparedStatement.setString(columnIndex++, baseLanguage);
@@ -558,31 +419,7 @@ public class Main {
         preparedStatement.setString(columnIndex++, StringUtils.join(idiomsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(derivationsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(compoundList, SEPARATOR));
-        preparedStatement.setString(columnIndex++, wordParadigm);
 
         preparedStatement.addBatch();
-    }
-
-    static class WordData {
-
-        private final String saldoId;
-        private final String associationsId;
-        private final String partOfSpeech;
-        private final String paradigm;
-
-        WordData(String saldoId, String associationsId, String partOfSpeech, String paradigm) {
-            this.saldoId = saldoId;
-            this.associationsId = associationsId;
-            this.partOfSpeech = partOfSpeech;
-            this.paradigm = paradigm;
-        }
-
-        String getPartOfSpeech() {
-            return partOfSpeech;
-        }
-
-        String getParadigm() {
-            return paradigm;
-        }
     }
 }
