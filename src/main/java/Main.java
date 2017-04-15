@@ -83,7 +83,7 @@ public class Main {
                     wordExplanation = "", wordPhonetic = "", wordUse = "", wordVariant = "";
 
             List<String> examplesList = new ArrayList<>(), translationsList = new ArrayList<>(),
-                    synonymsList = new ArrayList<>(), saldosList = new ArrayList<>(),
+                    synonymsList = new ArrayList<>(), lemgramsList = new ArrayList<>(),
                     comparisonsList = new ArrayList<>(), antonymsList = new ArrayList<>(),
                     idiomsList = new ArrayList<>(), derivationsList = new ArrayList<>(),
                     compoundList = new ArrayList<>();
@@ -138,7 +138,7 @@ public class Main {
 
                 } else if (SEE_NODE.equals(childNodeName)) {
 
-                    extractSeeValues(saldosList, comparisonsList, childNode);
+                    extractSeeValues(lemgramsList, comparisonsList, childNode);
 
                 } else if (RELATED_NODE.equals(childNodeName)) {
 
@@ -190,7 +190,7 @@ public class Main {
 
             populateStatement(preparedStatement, baseLanguage, wordValue, wordTypes, wordComment, wordInflections,
                     wordDefinition, wordExplanation, wordPhonetic, wordUse, wordVariant, examplesList,
-                    translationsList, synonymsList, saldosList, comparisonsList, antonymsList, idiomsList,
+                    translationsList, synonymsList, lemgramsList, comparisonsList, antonymsList, idiomsList,
                     derivationsList, compoundList);
         }
 
@@ -257,12 +257,12 @@ public class Main {
         return getAttributeValue(wordNode, VALUE_ATTRIBUTE).replaceAll("\\|", "");
     }
 
-    private static void extractSeeValues(List<String> saldosList, List<String> comparisonsList, Node childNode) {
+    private static void extractSeeValues(List<String> lemgramsList, List<String> comparisonsList, Node childNode) {
         String seeType = getAttributeValue(childNode, "type");
 
         if ("saldo".equals(seeType)) {
             String saldoValue = getSaldoValue(childNode);
-            saldosList.add(saldoValue);
+            lemgramsList.add(saldoValue);
         } else if ("compare".equals(seeType)) {
             comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
         }
@@ -307,16 +307,25 @@ public class Main {
 
     private static String getSaldoValue(Node node) {
 
-        String attributeText = "";
+        String lemgram = "";
 
         if (node != null
                 && node.hasAttributes()
                 && node.getAttributes().getNamedItem(VALUE_ATTRIBUTE) != null) {
-            attributeText = node.getAttributes().getNamedItem(VALUE_ATTRIBUTE).getTextContent()
+            String attributeText = node.getAttributes().getNamedItem(VALUE_ATTRIBUTE).getTextContent()
                     .trim();
+
+            // Saldo value should be in three || delimited parts, e.g.:
+            // abc-bok||abc-bok..1||abc-bok..nn.1
+            // [0] word form, [1] associations, [2] inflections
+            String[] saldoAttributes = attributeText.split("\\|\\|");
+
+            if (saldoAttributes.length == 3) {
+                lemgram = saldoAttributes[2];
+            }
         }
 
-        return StringEscapeUtils.unescapeHtml4(attributeText);
+        return StringEscapeUtils.unescapeHtml4(lemgram);
     }
 
     private static String getAttributeValue(Node node, String attributeName) {
@@ -339,7 +348,7 @@ public class Main {
                 String.format(Locale.US, "%s(", tableName) +
                 "language, word, comment, translations, types, inflections, " +
                 "examples, definition, explanation, phonetic, " +
-                "synonyms, saldos, comparisons, antonyms, use, " +
+                "synonyms, lemgrams, comparisons, antonyms, use, " +
                 "variant, idioms, derivations, compounds) " +
                 "values(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         );
@@ -372,7 +381,7 @@ public class Main {
                         "explanation TEXT," +
                         "phonetic TEXT," +
                         "synonyms TEXT," +
-                        "saldos TEXT," +
+                        "lemgrams TEXT," +
                         "comparisons TEXT," +
                         "antonyms TEXT," +
                         "use TEXT," +
@@ -395,7 +404,7 @@ public class Main {
                                           String wordDefinition, String wordExplanation, String wordPhonetic,
                                           String wordUse, String wordVariant, List<String> examplesList,
                                           List<String> translationsList, List<String> synonymsList,
-                                          List<String> saldosList, List<String> comparisonsList,
+                                          List<String> lemgramsList, List<String> comparisonsList,
                                           List<String> antonymsList, List<String> idiomsList, List<String> derivationsList,
                                           List<String> compoundList) throws SQLException {
         int columnIndex = 1;
@@ -411,7 +420,7 @@ public class Main {
         preparedStatement.setString(columnIndex++, wordExplanation);
         preparedStatement.setString(columnIndex++, wordPhonetic);
         preparedStatement.setString(columnIndex++, StringUtils.join(synonymsList, SEPARATOR));
-        preparedStatement.setString(columnIndex++, StringUtils.join(saldosList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(lemgramsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(comparisonsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(antonymsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, wordUse);
