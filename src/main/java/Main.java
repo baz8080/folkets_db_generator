@@ -388,7 +388,8 @@ public class Main {
                         "variant TEXT," +
                         "idioms TEXT," +
                         "derivations TEXT," +
-                        "compounds TEXT" +
+                        "compounds TEXT," +
+                        "baseform TEXT" +
                         ")"
         );
         statement.executeUpdate(String.format(Locale.US, "CREATE INDEX %s_idx_word ON %s (word)", tableName, tableName));
