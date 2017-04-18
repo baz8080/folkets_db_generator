@@ -83,10 +83,11 @@ public class Main {
                     wordExplanation = "", wordPhonetic = "", wordUse = "", wordVariant = "";
 
             List<String> examplesList = new ArrayList<>(), translationsList = new ArrayList<>(),
-                    synonymsList = new ArrayList<>(), lemgramsList = new ArrayList<>(),
-                    comparisonsList = new ArrayList<>(), antonymsList = new ArrayList<>(),
-                    idiomsList = new ArrayList<>(), derivationsList = new ArrayList<>(),
-                    compoundList = new ArrayList<>();
+                    synonymsList = new ArrayList<>(), comparisonsList = new ArrayList<>(),
+                    antonymsList = new ArrayList<>(), idiomsList = new ArrayList<>(),
+                    derivationsList = new ArrayList<>(), compoundList = new ArrayList<>();
+
+            Set<String> lemgramsSet = new TreeSet<>();
 
             Node wordNode = wordsList.item(i);
 
@@ -138,7 +139,7 @@ public class Main {
 
                 } else if (SEE_NODE.equals(childNodeName)) {
 
-                    extractSeeValues(lemgramsList, comparisonsList, childNode);
+                    extractSeeValues(lemgramsSet, comparisonsList, childNode);
 
                 } else if (RELATED_NODE.equals(childNodeName)) {
 
@@ -190,7 +191,7 @@ public class Main {
 
             populateStatement(preparedStatement, baseLanguage, wordValue, wordTypes, wordComment, wordInflections,
                     wordDefinition, wordExplanation, wordPhonetic, wordUse, wordVariant, examplesList,
-                    translationsList, synonymsList, lemgramsList, comparisonsList, antonymsList, idiomsList,
+                    translationsList, synonymsList, lemgramsSet, comparisonsList, antonymsList, idiomsList,
                     derivationsList, compoundList);
         }
 
@@ -257,12 +258,12 @@ public class Main {
         return getAttributeValue(wordNode, VALUE_ATTRIBUTE).replaceAll("\\|", "");
     }
 
-    private static void extractSeeValues(List<String> lemgramsList, List<String> comparisonsList, Node childNode) {
+    private static void extractSeeValues(Set<String> lemgramsSet, List<String> comparisonsList, Node childNode) {
         String seeType = getAttributeValue(childNode, "type");
 
         if ("saldo".equals(seeType)) {
             String saldoValue = getSaldoValue(childNode);
-            lemgramsList.add(saldoValue);
+            lemgramsSet.add(saldoValue);
         } else if ("compare".equals(seeType)) {
             comparisonsList.add(getAttributeValue(childNode, VALUE_ATTRIBUTE));
         }
@@ -405,7 +406,7 @@ public class Main {
                                           String wordDefinition, String wordExplanation, String wordPhonetic,
                                           String wordUse, String wordVariant, List<String> examplesList,
                                           List<String> translationsList, List<String> synonymsList,
-                                          List<String> lemgramsList, List<String> comparisonsList,
+                                          Set<String> lemgramsSet, List<String> comparisonsList,
                                           List<String> antonymsList, List<String> idiomsList, List<String> derivationsList,
                                           List<String> compoundList) throws SQLException {
         int columnIndex = 1;
@@ -421,7 +422,7 @@ public class Main {
         preparedStatement.setString(columnIndex++, wordExplanation);
         preparedStatement.setString(columnIndex++, wordPhonetic);
         preparedStatement.setString(columnIndex++, StringUtils.join(synonymsList, SEPARATOR));
-        preparedStatement.setString(columnIndex++, StringUtils.join(lemgramsList, SEPARATOR));
+        preparedStatement.setString(columnIndex++, StringUtils.join(lemgramsSet, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(comparisonsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, StringUtils.join(antonymsList, SEPARATOR));
         preparedStatement.setString(columnIndex++, wordUse);
